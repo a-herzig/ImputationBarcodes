@@ -1,8 +1,4 @@
-#library(doParallel)
-library(gaston)
-library(gaston.utils)
 options(scipen=999)
-
 
 # chargement des fonctions set.stats_haplotype() et select.snps_haplotype()
 select.snps_haplotype <-function (x, condition)
@@ -87,12 +83,17 @@ set.stats_haplotype <- function (x, set.p = TRUE, set.mu_sigma = TRUE, verbose =
 }
 }
 
-
-for(chr in 1:22) {
-print(chr)
 library(gaston)
 library(Mozza)
 library(gaston.utils)
+
+for(chr in 1:22) {
+print(chr)
+### Things you will need, vcf of your reference panel (eg. 1000 Genomes)
+### Set of snps-array positions of interest (eg. a table of chr and position numbers)
+### Information about groups of interest within the reference panel to trace (eg. the 1000G sample file)
+### I have added lines for add an estimated genetic distance for each marker - not really necesary here but as you might
+### want to simulat some mosaics with Mozza, this could be useful.
 filename<-paste("/PUBLIC_DATA/ReferencePanels/1kG/beagle_vcf_ref/chr",chr,".1kg.phase3.v5a.vcf.gz",sep="")
 namesChromR<-strsplit(system(paste("zcat ",filename," | grep -n -m 1 \"CHROM\"",sep=""),intern=T),":")[[1]][2]
 namesChromR<-unlist(strsplit(namesChromR,"\t"));namesChromR[1]<-"CHROM";samples<-namesChromR[-c(1:9)]
@@ -127,8 +128,10 @@ ped$super.population <- KG.samples$GROUP[m]
 snp <- data.frame(chr = KG_haplo_raw$chr, id = ifelse( KG_haplo_raw$id ==".", paste(KG_haplo_raw$chr,KG_haplo_raw$pos,KG_haplo_raw$A1,KG_haplo_raw$A2,sep=":"),KG_haplo_raw$id), dist = distcM[,2], pos = KG_haplo_raw$pos , A1 = KG_haplo_raw$A1, A2 = KG_haplo_raw$A2,quality = KG_haplo_raw$quality, filter = factor(KG_haplo_raw$filter), stringsAsFactors = FALSE)
 KG_haplo <- new("bed.matrix", bed = KG_haplo_raw$bed, snps = snp, ped = ped, p = NULL, mu = NULL, sigma = NULL, standardize_p = FALSE, standardize_mu_sigma = FALSE )
 
+
+
 KG_haplo <- select.snps_haplotype(KG_haplo, (KG_haplo@snps$pos >= head(map[,4],1) & KG_haplo@snps$pos <= tail(map[,4],1)))
-KG_haplo <- KG_haplo[,-which(duplicated(KG_haplo@snps$pos))]
+KG_haplo <- KG_haplo[,-which(duplicated(KG_haplo@snps$pos) | duplicated(KG_haplo@snps$pos,fromLast=TRUE))]
 KG_haplo <- select.snps_haplotype(KG_haplo, (!grepl(",",KG_haplo@snps$A2)))
 KG_haplo <- set.stats_haplotype(KG_haplo)
 
