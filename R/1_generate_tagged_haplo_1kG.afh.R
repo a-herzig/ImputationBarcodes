@@ -103,6 +103,9 @@ KG.samples<- read.table("/PUBLIC_DATA/ReferencePanels/1kG/impute/Phase3/1000GP_P
 map <- read.table(paste("/PUBLIC_DATA/ReferencePanels/1kG/beagle_vcf_ref/plink.chr",chr,".GRCh37.map",sep=""),header=F,as.is=T)
 ukbb_array<-read.table("/WORKING_DIRECTORY/share/Imputation_UKBB_array.txt",header=F,as.is=T)
 
+### Here we are reading and organising the haplotypes as gaston ususally works with diploid data
+
+
 m <- match(KG@snps$pos, map[,4]) 
 distcM<-cbind(KG@snps$pos,map[m,3],rep(1,length(KG@snps$pos)))
 map2 <- map[is.na(match(map[,4],distcM[,1])),c(4,3)] ; map2 <- cbind(map2,rep(2,nrow(map2)))
@@ -128,7 +131,7 @@ ped$super.population <- KG.samples$GROUP[m]
 snp <- data.frame(chr = KG_haplo_raw$chr, id = ifelse( KG_haplo_raw$id ==".", paste(KG_haplo_raw$chr,KG_haplo_raw$pos,KG_haplo_raw$A1,KG_haplo_raw$A2,sep=":"),KG_haplo_raw$id), dist = distcM[,2], pos = KG_haplo_raw$pos , A1 = KG_haplo_raw$A1, A2 = KG_haplo_raw$A2,quality = KG_haplo_raw$quality, filter = factor(KG_haplo_raw$filter), stringsAsFactors = FALSE)
 KG_haplo <- new("bed.matrix", bed = KG_haplo_raw$bed, snps = snp, ped = ped, p = NULL, mu = NULL, sigma = NULL, standardize_p = FALSE, standardize_mu_sigma = FALSE )
 
-
+### Now that the haplotypes are storedm we remove some variants, eg. multiallelic
 
 KG_haplo <- select.snps_haplotype(KG_haplo, (KG_haplo@snps$pos >= head(map[,4],1) & KG_haplo@snps$pos <= tail(map[,4],1)))
 KG_haplo <- KG_haplo[,-which(duplicated(KG_haplo@snps$pos) | duplicated(KG_haplo@snps$pos,fromLast=TRUE))]
@@ -141,17 +144,30 @@ KG <- KG[,-which(duplicated(KG@snps$pos))]
 KG <- select.snps(KG, (!grepl(",",KG@snps$A2)))
 KG <- set.stats(KG)
 
+### Choose some variants to tag
+
 key_variants <- select.snps(KG,(paste(KG@snps$chr,KG@snps$pos,sep=":") %in% paste(ukbb_array[,1],ukbb_array[,2],sep=":")))
 key_variants <- select.snps(key_variants, key_variants@snps$maf > 0.2)
 key_variants <- LD.thin(key_variants, 0.02)
 key_pos <- key_variants@snps$pos + 1
 key_pos <- key_pos[!(key_pos %in% KG@snps$pos)]
 
+### add barcodes, here is a version where one barcode is added for each of the 26 populations of 1000G - can easily make adjustments to tag only the 5 super populations
+
 nb_tag<-26 
 barcode <- rep(key_pos,each=nb_tag) + ((1:nb_tag)/(nb_tag+1))
 
 
+## five super population version 
+#nb_tag<-5 
+#barcode <- rep(key_pos,each=nb_tag) + ((1:nb_tag)/(nb_tag+1))
+
+
 snp2 <- data.frame(chr = chr, id = paste("mosaicbarcode",rep(1:length(key_pos),each=nb_tag),unique(KG_haplo@ped$population),sep=":"), dist = rep(KG_haplo@snps$dist[which(KG_haplo@snps$pos%in%(key_pos-1))],each=nb_tag), pos = barcode , A1 = "G", A2 = "T",quality = NA, filter = NA, stringsAsFactors = FALSE)
+
+## five super population version 
+#snp2 <- data.frame(chr = chr, id = paste("mosaicbarcode",rep(1:length(key_pos),each=nb_tag),unique(KG_haplo@ped$super.population),sep=":"), dist = rep(KG_haplo@snps$dist[which(KG_haplo@snps$pos%in%(key_pos-1))],each=nb_tag), pos = barcode , A1 = "G", A2 = "T",quality = NA, filter = NA, stringsAsFactors = FALSE)
+
 
 bed2<-matrix(0,nrow(ped),nrow(snp2))
 
@@ -162,6 +178,15 @@ w2<-which(KG_haplo@ped$population==pop)
 bed2[w2,w]<-1
 }
 
+## five super population version 
+#for (j in 1:nb_tag){
+#w<-seq(j,nb_tag*(length(key_pos)-1)+j,nb_tag)
+#pop<-unique(KG_haplo@ped$super.population)[j]
+#w2<-which(KG_haplo@ped$super.population==pop)
+#bed2[w2,w]<-1
+#}
+
+
 synthetic_var_bedmat <- as.bed.matrix(x=bed2,fam=ped,bim=snp2)
 
 KG_haplo_tagged <- cbind(KG_haplo,synthetic_var_bedmat)
@@ -170,8 +195,8 @@ KG_haplo_tagged<-KG_haplo_tagged[,m]
 KG_haplo_tagged@snps$pos <- as.integer(KG_haplo_tagged@snps$pos)
 KG_haplo_tagged <- set.stats_haplotype(KG_haplo_tagged)
 
-
-write.bed.matrix(KG_haplo_tagged, paste("/WORKING_DIRECTORY/aherzig/tdekNOV22/haplo_tagged_chr",chr,"_v",version_bedmat,sep=""))
+###Store the tagged reference panel 
+write.bed.matrix(KG_haplo_tagged, paste("/WORKING_DIRECTORY/aherzig/tdekNOV22/haplo_tagged_chr",chr,sep=""))
 
 
 }
